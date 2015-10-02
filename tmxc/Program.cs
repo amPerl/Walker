@@ -1,75 +1,66 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using TiledSharp;
+using Walker.Shared.Map;
 
 namespace tmxc
 {
-  class Program
-  {
-    static TmxMap _map;
-
-    static void Main(string[] args)
+    class Program
     {
-      if(args.Length < 2)
-      {
-        Console.WriteLine("Usage: tmxc source dest");
-        return;
-      }
+        static TmxMap _map;
 
-      try
-      {
-        _map = new TmxMap(args[0]);
-      }
-      catch
-      {
-        Console.WriteLine($"Failed to open map file '{args[0]}'");
-        return;
-      }
-
-      var dest = args[1] + ".map";
-      using (var fs = new FileStream(dest, FileMode.Create))
-      {
-        using (var writer = new BinaryWriter(fs))
+        static void Main(string[] args)
         {
-          Console.WriteLine($"Writing {_map.Tilesets.Count} tilesets...");
-          writer.Write(_map.Tilesets.Count);  // int
-
-          foreach(var tileset in _map.Tilesets)
-          {
-            writer.Write(tileset.Name.ToLower());         // string
-            writer.Write(tileset.Image.Source.ToLower()); // string
-            writer.Write(tileset.Margin);                 // int
-            writer.Write(tileset.Spacing);                // int
-            writer.Write((int)tileset.TileCount);         // int
-            writer.Write(tileset.TileWidth);              // int
-            writer.Write(tileset.TileHeight);             // int
-            writer.Write(tileset.FirstGid);               // int
-
-            // Look for properties in the tiles.
-            var tilePropertyCount = 0;
-            foreach(var tile in tileset.Tiles)
+            if (args.Length < 2)
             {
-              if (tile.Properties.Count > 0) tilePropertyCount++;
+                Console.WriteLine("Usage: tmxc source dest");
+                return;
             }
 
-            Console.WriteLine($"Tileset {tileset.Name} has {tilePropertyCount} properties.");
-            writer.Write(tilePropertyCount);      // int
-            foreach(var tile in tileset.Tiles)
+            try
             {
-              if (tile.Properties.Count == 0) continue;
-
-              Console.WriteLine($"Writing {tile.Properties.Count} properties for tile {tile.Id} in tileset {tileset.Name}.");
-              writer.Write(tile.Id);                // int
-              writer.Write(tile.Properties.Count);  // int
-              foreach(var property in tile.Properties)
-              {
-                writer.Write(property.Key.ToLower());   // string
-                writer.Write(property.Value.ToLower()); // string
-              }
+                _map = new TmxMap(args[0]);
             }
-          }
+            catch
+            {
+                Console.WriteLine($"Failed to open map file '{args[0]}'");
+                return;
+            }
+
+            Map walkerMap = new Map();
+            foreach (var tileset in _map.Tilesets)
+            {
+                Tileset walkerTileset = new Tileset(tileset.Name, tileset.Image.Source)
+                {
+                    Margin = tileset.Margin,
+                    Spacing = tileset.Spacing,
+                    TileCount = (int)tileset.TileCount,
+                    TileWidth = tileset.TileWidth,
+                    TileHeight = tileset.TileHeight,
+                    FirstGid = tileset.FirstGid
+                };
+
+                foreach (var tile in tileset.Tiles.Where(tile => tile.Properties.Count > 0))
+                {
+                    TilePropertyEntry entry = new TilePropertyEntry { Id = tile.Id };
+
+                    foreach (var kvp in tile.Properties)
+                        entry.Properties.Add(kvp.Key, kvp.Value);
+
+                    walkerTileset.PropertyEntries.Add(entry);
+                }
+
+                walkerMap.Tilesets.Add(walkerTileset);
+            }
+
+            var dest = args[1] + ".map";
+            using (var fs = new FileStream(dest, FileMode.Create))
+            using (var writer = new BinaryWriter(fs))
+            {
+                walkerMap.Write(writer);
+            }
         }
-      }
     }
-  }
 }
